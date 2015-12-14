@@ -1,139 +1,111 @@
 // license:BSD-3-Clause
-// copyright-holders:Fabio Priuli,Acho A. Tang, R. Belmont
+// copyright-holders: Olivier Galibert
 /*
-Konami 053251
-------
-Priority encoder.
 
-The chip has inputs for 5 layers (CI0-CI4); only 4 are used (CI1-CI4)
-CI0-CI2 are 9(=5+4) bits inputs, CI3-CI4 8(=4+4) bits
+Konami 053251 "PCU"
+-------------------
 
-The input connctions change from game to game. E.g. in Simpsons,
-CI0 = grounded (background color)
-CI1 = sprites
-CI2 = FIX
-CI3 = A
-CI4 = B
+Priority encoder, aka mixer.
 
-in lgtnfght:
-CI0 = grounded
-CI1 = sprites
-CI2 = FIX
-CI3 = B
-CI4 = A
+The chip has inputs for 3 "complex" layers (CI0-2), with 9 color bits
+and 6 priority bits, plus 2 "simple" layers (CI3-4) with 8 color bits
+and no priority bits.  In addition it has two shadow bits (SD0-1),
+where SD0 can be alternatively used as a color bit (probably on CI0
+only, user by Over Drive).  It outputs a 11-bits color, two shadow
+bits, one brightness bit and one "pixel present" bit.  It is fast
+enough to output two pixels per pixel clock, which is used by Xexex
+and Moo Mesa hardware to generate two planes for the 054338 blender.
 
-there are three 6 bit priority inputs, PR0-PR2
+A layer pixel is considered transparent if the 4 bottom color bits are
+zero.  Lowest priority score wins.
 
-simpsons:
-PR0 = 111111
-PR1 = xxxxx0 x bits coming from the sprite attributes
-PR2 = 111111
+Connections vary heavily from game to game, and Konami went very funky
+on the priority bit connections, often wiring some of the bits to
+vcc/gnd and connecting others to the sprite chips and friends.
 
-lgtnfght:
-PR0 = 111111
-PR1 = 1xx000 x bits coming from the sprite attributes
-PR2 = 111111
+14 internal registers, write-only; registers are 6 bits wide (input is
+D0-D5), mostly not understood.  Register d is only used by Over Drive
+(with value 0xe), probably activates the extra attribute bit.
 
-also two shadow inputs, SDI0 and SDI1 (from the sprite attributes)
+Register map:
 
-the chip outputs the 11 bit palette index, CO0-CO10, and two shadow bits.
+            5   4   3   2   1   0
+00 pri 0    --------pri 0--------
+01 pri 1    --------pri 1--------
+02 pri 2    --------pri 2--------
+03 pri 3    --------pri 3--------
+04 pri 4    --------pri 4--------
+05 sha0pri  -------sha0pri-------
+06 sha1pri  -------sha1pri-------
+07 ?        ?   ?   ?   ?   ?   ?
+08 ?        ?   ?   ?   ?   ?   ?
+09 cblk012  --2--   --1--   --0--
+0a cblk34   ----4----   ----3----
+0b ?        ?   ?   ?   ?   ?   ?
+0c inpri    .   .   . in2 in1 in0
+0d extsha   ?   ?   ? in2 in1 in0
 
-16 internal registers; registers are 6 bits wide (input is D0-D5)
-For the most part, their meaning is unknown
-All registers are write only.
-There must be a way to enable/disable the three external PR inputs.
-Some games initialize the priorities of the sprite & background layers,
-others don't. It isn't clear whether the data written to those registers is
-actually used, since the priority is taken from the external ports.
-
- 0  priority of CI0 (higher = lower priority)
-    punkshot: unused?
-    lgtnfght: unused?
-    simpsons: 3f = 111111
-    xmen:     05 = 000101  default value
-    xmen:     09 = 001001  used to swap CI0 and CI2
- 1  priority of CI1 (higher = lower priority)
-    punkshot: 28 = 101000
-    lgtnfght: unused?
-    simpsons: unused?
-    xmen:     02 = 000010
- 2  priority of CI2 (higher = lower priority)
-    punkshot: 24 = 100100
-    lgtnfght: 24 = 100100
-    simpsons: 04 = 000100
-    xmen:     09 = 001001  default value
-    xmen:     05 = 000101  used to swap CI0 and CI2
- 3  priority of CI3 (higher = lower priority)
-    punkshot: 34 = 110100
-    lgtnfght: 34 = 110100
-    simpsons: 28 = 101000
-    xmen:     00 = 000000
- 4  priority of CI4 (higher = lower priority)
-    punkshot: 2c = 101100  default value
-    punkshot: 3c = 111100  used to swap CI3 and CI4
-    punkshot: 26 = 100110  used to swap CI1 and CI4
-    lgtnfght: 2c = 101100
-    simpsons: 18 = 011000
-    xmen:     fe = 111110
- 5  unknown
-    punkshot: unused?
-    lgtnfght: 2a = 101010
-    simpsons: unused?
-    xmen: unused?
- 6  unknown
-    punkshot: 26 = 100110
-    lgtnfght: 30 = 110000
-    simpsons: 17 = 010111
-    xmen:     03 = 000011 (written after initial tests)
- 7  unknown
-    punkshot: unused?
-    lgtnfght: unused?
-    simpsons: 27 = 100111
-    xmen:     07 = 000111 (written after initial tests)
- 8  unknown
-    punkshot: unused?
-    lgtnfght: unused?
-    simpsons: 37 = 110111
-    xmen:     ff = 111111 (written after initial tests)
- 9  ----xx CI0 palette index base (CO9-CO10)
-    --xx-- CI1 palette index base (CO9-CO10)
-    xx---- CI2 palette index base (CO9-CO10)
-10  ---xxx CI3 palette index base (CO8-CO10)
-    xxx--- CI4 palette index base (CO8-CO10)
-11  unknown
-    punkshot: 00 = 000000
-    lgtnfght: 00 = 000000
-    simpsons: 00 = 000000
-    xmen:     00 = 000000 (written after initial tests)
-12  unknown
-    punkshot: 04 = 000100
-    lgtnfght: 04 = 000100
-    simpsons: 05 = 000101
-    xmen:     05 = 000101
-13  unused
-14  unused
-15  unused
-
-
+pri n:   internal priority of layer <n>
+cblk:    palette bits of layer <n>, 2 bits for layers 0-2, 3 for layers 4-5
+sha?pri: (unproven) minimal priority value of the top layer for the shadow bits to be transmitted
+inpri:   external priority active (0=yes)
+extsha:  sha0 used as attribute bit (0=yes)
 */
 
 #include "emu.h"
 #include "k053251.h"
-#include "konami_helper.h"
-
-#define VERBOSE 0
-#include "logmacro.h"
-
+#include "kvideodac.h"
 
 DEFINE_DEVICE_TYPE(K053251, k053251_device, "k053251", "K053251 Priority Encoder")
 
+DEVICE_ADDRESS_MAP_START(map, 8, k053251_device)
+	AM_RANGE(0x00, 0x04) AM_WRITE(pri_w)
+	AM_RANGE(0x05, 0x06) AM_WRITE(sha_w)
+	AM_RANGE(0x09, 0x0a) AM_WRITE(cblk_w)
+	AM_RANGE(0x0c, 0x0c) AM_WRITE(inpri_w)
+	AM_RANGE(0x0d, 0x0d) AM_WRITE(extsha_w)
+ADDRESS_MAP_END
+
 k053251_device::k053251_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
-	: device_t(mconfig, K053251, tag, owner, clock),
-	//m_dirty_tmap[5],
-	//m_ram[16],
-	m_tilemaps_set(0)
-	//m_palette_index[5]
+	: device_t(mconfig, K053251, tag, owner, clock)
 {
+}
+
+void k053251_device::set_shadow_layer(int layer)
+{
+	m_shadow_layer = layer;
+}
+
+WRITE8_MEMBER(k053251_device::pri_w)
+{
+	m_pri[offset] = data & 0x3f;
+}
+
+WRITE8_MEMBER(k053251_device::sha_w)
+{
+	m_sha[offset] = data & 0x3f;
+}
+
+WRITE8_MEMBER(k053251_device::cblk_w)
+{
+	if(!offset) {
+		m_cblk[0] = (data & 0x03) << 9;
+		m_cblk[1] = (data & 0x0c) << 7;
+		m_cblk[2] = (data & 0x30) << 5;
+	} else {
+		m_cblk[3] = (data & 0x07) << 8;
+		m_cblk[4] = (data & 0x38) << 5;
+	}
+}
+
+WRITE8_MEMBER(k053251_device::inpri_w)
+{
+	m_inpri = data & 0x3f;
+}
+
+WRITE8_MEMBER(k053251_device::extsha_w)
+{
+	m_extsha = data & 0x3f;
 }
 
 //-------------------------------------------------
@@ -142,11 +114,15 @@ k053251_device::k053251_device(const machine_config &mconfig, const char *tag, d
 
 void k053251_device::device_start()
 {
-	save_item(NAME(m_ram));
-	save_item(NAME(m_tilemaps_set));
-	save_item(NAME(m_dirty_tmap));
+	m_init_cb.bind_relative_to(*owner());
+	m_update_cb.bind_relative_to(*owner());
+	memset(m_bitmaps, 0, sizeof(m_bitmaps));
 
-	machine().save().register_postload(save_prepost_delegate(FUNC(k053251_device::reset_indexes), this));
+	save_item(NAME(m_pri));
+	save_item(NAME(m_inpri));
+	save_item(NAME(m_cblk));
+	save_item(NAME(m_sha));
+	save_item(NAME(m_extsha));
 }
 
 //-------------------------------------------------
@@ -155,118 +131,118 @@ void k053251_device::device_start()
 
 void k053251_device::device_reset()
 {
-	int i;
-
-	m_tilemaps_set = 0;
-
-	for (i = 0; i < 0x10; i++)
-		m_ram[i] = 0;
-
-	for (i = 0; i < 5; i++)
-		m_dirty_tmap[i] = 0;
-
-	reset_indexes();
+	memset(m_pri, 0, sizeof(m_pri));
+	memset(m_cblk, 0, sizeof(m_cblk));
+	m_extsha = 0x3f;
+	m_sha[0] = m_sha[1] = 0x00;
+	m_inpri = 0x00;
 }
 
-/*****************************************************************************
-    DEVICE HANDLERS
-*****************************************************************************/
-
-WRITE8_MEMBER( k053251_device::write )
+void k053251_device::bitmap_update(bitmap_ind16 **bitmaps, const rectangle &cliprect)
 {
-	int i, newind;
+	if(!m_bitmaps[0] || m_bitmaps[0]->width() != bitmaps[0]->width() || m_bitmaps[0]->height() != bitmaps[0]->height()) {
+		if(m_bitmaps[0])
+			for(int i=0; i<BITMAP_COUNT; i++)
+				delete m_bitmaps[i];
+		for(int i=0; i<BITMAP_COUNT; i++)
+			m_bitmaps[i] = new bitmap_ind16(bitmaps[0]->width(), bitmaps[0]->height());
+		if(!m_init_cb.isnull())
+			m_init_cb(m_bitmaps);
+	}
 
-	data &= 0x3f;
+	m_update_cb(m_bitmaps, cliprect);
 
-	if (m_ram[offset] != data)
-	{
-		m_ram[offset] = data;
-		if (offset == 9)
-		{
-			/* palette base index */
-			for (i = 0; i < 3; i++)
-			{
-				newind = 32 * ((data >> 2 * i) & 0x03);
-				if (m_palette_index[i] != newind)
-				{
-					m_palette_index[i] = newind;
-					m_dirty_tmap[i] = 1;
+	u8 disp = 0x1f;
+	if(machine().input().code_pressed(KEYCODE_Q)) disp &= ~0x01;
+	if(machine().input().code_pressed(KEYCODE_W)) disp &= ~0x02;
+	if(machine().input().code_pressed(KEYCODE_E)) disp &= ~0x04;
+	if(machine().input().code_pressed(KEYCODE_R)) disp &= ~0x08;
+	if(machine().input().code_pressed(KEYCODE_T)) disp &= ~0x10;
+
+	for(int y = cliprect.min_y; y <= cliprect.max_y; y++) {
+		const uint16_t *c0 = &m_bitmaps[LAYER0_COLOR]->pix16(y, cliprect.min_x);
+		const uint16_t *c1 = &m_bitmaps[LAYER1_COLOR]->pix16(y, cliprect.min_x);
+		const uint16_t *c2 = &m_bitmaps[LAYER2_COLOR]->pix16(y, cliprect.min_x);
+		const uint16_t *c3 = &m_bitmaps[LAYER3_COLOR]->pix16(y, cliprect.min_x);
+		const uint16_t *c4 = &m_bitmaps[LAYER4_COLOR]->pix16(y, cliprect.min_x);
+		const uint16_t *a0 = &m_bitmaps[LAYER0_ATTR ]->pix16(y, cliprect.min_x);
+		const uint16_t *a1 = &m_bitmaps[LAYER1_ATTR ]->pix16(y, cliprect.min_x);
+		const uint16_t *a2 = &m_bitmaps[LAYER2_ATTR ]->pix16(y, cliprect.min_x);
+		uint16_t *dc = &bitmaps[kvideodac_device::BITMAP_COLOR]->pix16(y, cliprect.min_x);
+		uint16_t *da = &bitmaps[kvideodac_device::BITMAP_ATTRIBUTES]->pix16(y, cliprect.min_x);
+
+		const uint16_t *const *shadp = m_shadow_layer == LAYER0_ATTR ? &a0 : m_shadow_layer == LAYER1_ATTR ? &a1 : &a2;
+
+		for(int x = cliprect.min_x; x <= cliprect.max_x; x++) {
+			uint8_t pri = 0x3f;
+			uint16_t color = 0x0000;
+			uint16_t cc, ca;
+			uint16_t shada = **shadp;
+			bool has_pix = false;
+
+			cc = *c0++ & 0x1ff;
+			ca = *a0++;
+			if((disp & 0x01) && (cc & 0xf)) {
+				uint8_t lpri = m_inpri & 1 ? m_pri[0] : ca & 0x3f;
+				has_pix = true;
+				color = cc | m_cblk[0];
+				pri = lpri;
+			}
+
+			cc = *c1++ & 0x1ff;
+			ca = *a1++;
+			if((disp & 0x02) && (cc & 0xf)) {
+				uint8_t lpri = m_inpri & 2 ? m_pri[1] : ca & 0x3f;
+				if(!has_pix || lpri < pri) {
+					has_pix = true;
+					color = cc | m_cblk[1];
+					pri = lpri;
 				}
 			}
 
-			if (!m_tilemaps_set)
-				space.machine().tilemap().mark_all_dirty();
-		}
-		else if (offset == 10)
-		{
-			/* palette base index */
-			for (i = 0; i < 2; i++)
-			{
-				newind = 16 * ((data >> 3 * i) & 0x07);
-				if (m_palette_index[3 + i] != newind)
-				{
-					m_palette_index[3 + i] = newind;
-					m_dirty_tmap[3 + i] = 1;
+			cc = *c2++ & 0x1ff;
+			ca = *a2++;
+			if((disp & 0x04) && (cc & 0xf)) {
+				uint8_t lpri = m_inpri & 4 ? m_pri[2] : ca & 0x3f;
+				if(!has_pix || lpri < pri) {
+					has_pix = true;
+					color = cc | m_cblk[2];
+					pri = lpri;
 				}
 			}
 
-			if (!m_tilemaps_set)
-				space.machine().tilemap().mark_all_dirty();
+			cc = *c3++ & 0x0ff;
+			if((disp & 0x08) && (cc & 0xf)) {
+				uint8_t lpri = m_pri[3];
+				if(!has_pix || lpri < pri) {
+					has_pix = true;
+					color = cc | m_cblk[3];
+					pri = lpri;
+				}
+			}
+
+			cc = *c4++ & 0x0ff;
+			if((disp & 0x10) && (cc & 0xf)) {
+				uint8_t lpri = m_pri[4];
+				if(!has_pix || lpri < pri) {
+					has_pix = true;
+					color = cc | m_cblk[4];
+					pri = lpri;
+				}
+			}
+
+			*dc++ = color;
+
+			if(!has_pix)
+				*da++ = 0;
+			else {
+				uint16_t attr = 0x8000;
+				if((shada & 1) && pri >= m_sha[0])
+					attr |= 1;
+				if((shada & 2) && pri >= m_sha[1])
+					attr |= 2;
+				*da++ = attr;
+			}
 		}
 	}
 }
-
-WRITE16_MEMBER( k053251_device::lsb_w )
-{
-	if (ACCESSING_BITS_0_7)
-		write(space, offset, data & 0xff);
-}
-
-WRITE16_MEMBER( k053251_device::msb_w )
-{
-	if (ACCESSING_BITS_8_15)
-		write(space, offset, (data >> 8) & 0xff);
-}
-
-int k053251_device::get_priority( int ci )
-{
-	return m_ram[ci];
-}
-
-int k053251_device::get_palette_index( int ci )
-{
-	return m_palette_index[ci];
-}
-
-int k053251_device::get_tmap_dirty( int tmap_num )
-{
-	assert(tmap_num < 5);
-	return m_dirty_tmap[tmap_num];
-}
-
-void k053251_device::set_tmap_dirty( int tmap_num, int data )
-{
-	assert(tmap_num < 5);
-	m_dirty_tmap[tmap_num] = data ? 1 : 0;
-}
-
-void k053251_device::reset_indexes()
-{
-	m_palette_index[0] = 32 * ((m_ram[9] >> 0) & 0x03);
-	m_palette_index[1] = 32 * ((m_ram[9] >> 2) & 0x03);
-	m_palette_index[2] = 32 * ((m_ram[9] >> 4) & 0x03);
-	m_palette_index[3] = 16 * ((m_ram[10] >> 0) & 0x07);
-	m_palette_index[4] = 16 * ((m_ram[10] >> 3) & 0x07);
-}
-
-// debug handlers
-
-READ16_MEMBER( k053251_device::lsb_r )
-{
-	return(m_ram[offset]);
-}       // PCU1
-
-READ16_MEMBER( k053251_device::msb_r )
-{
-	return(m_ram[offset] << 8);
-}       // PCU1

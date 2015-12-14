@@ -1,38 +1,51 @@
 // license:BSD-3-Clause
-// copyright-holders:Fabio Priuli, Acho A. Tang, R. Belmont
+// copyright-holders: Olivier Galibert
 #ifndef MAME_VIDEO_K053251_H
 #define MAME_VIDEO_K053251_H
+
+#define MCFG_K053251_ADD(_tag, _shadow_layer)		\
+	MCFG_DEVICE_ADD(_tag, K053251, 0) \
+	downcast<k053251_device *>(device)->set_shadow_layer(_shadow_layer);
+
+#define MCFG_K053251_SET_INIT_CB(_tag, _class, _method)					\
+	downcast<k053251_device *>(device)->set_init_cb(k053251_device::init_cb(&_class::_method, #_class "::" #_method, _tag, (_class *)nullptr));
+
+#define MCFG_K053251_SET_UPDATE_CB(_tag, _class, _method)				\
+	downcast<k053251_device *>(device)->set_update_cb(k053251_device::update_cb(&_class::_method, #_class "::" #_method, _tag, (_class *)nullptr));
 
 class k053251_device : public device_t
 {
 public:
-	enum
-	{
-		CI0 = 0,
-		CI1,
-		CI2,
-		CI3,
-		CI4
+	enum {
+		LAYER0_COLOR,
+		LAYER1_COLOR,
+		LAYER2_COLOR,
+		LAYER3_COLOR,
+		LAYER4_COLOR,
+		LAYER0_ATTR,
+		LAYER1_ATTR,
+		LAYER2_ATTR,
+		BITMAP_COUNT
 	};
+		
+	typedef device_delegate<void (bitmap_ind16 **)> init_cb;
+	typedef device_delegate<void (bitmap_ind16 **, const rectangle &)> update_cb;
 
 	k053251_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
-	/*
-	Note: k053251_w() automatically does a ALL_TILEMAPS->mark_all_dirty()
-	when some palette index changes. If ALL_TILEMAPS is too expensive, use
-	k053251_set_tilemaps() to indicate which tilemap is associated with each index.
-	*/
+	void set_shadow_layer(int layer);
+	void set_init_cb(init_cb _cb) { m_init_cb = _cb; }
+	void set_update_cb(update_cb _cb) { m_update_cb = _cb; }
 
-	DECLARE_WRITE8_MEMBER( write );
-	DECLARE_WRITE16_MEMBER( lsb_w );
-	DECLARE_WRITE16_MEMBER( msb_w );
-	int get_priority(int ci);
-	int get_palette_index(int ci);
-	int get_tmap_dirty(int tmap_num);
-	void set_tmap_dirty(int tmap_num, int data);
+	DECLARE_WRITE8_MEMBER(pri_w);
+	DECLARE_WRITE8_MEMBER(sha_w);
+	DECLARE_WRITE8_MEMBER(cblk_w);
+	DECLARE_WRITE8_MEMBER(inpri_w);
+	DECLARE_WRITE8_MEMBER(extsha_w);
 
-	DECLARE_READ16_MEMBER( lsb_r );         // PCU1
-	DECLARE_READ16_MEMBER( msb_r );         // PCU1
+	DECLARE_ADDRESS_MAP(map, 8);
+
+	void bitmap_update(bitmap_ind16 **bitmaps, const rectangle &cliprect);
 
 protected:
 	// device-level overrides
@@ -40,20 +53,19 @@ protected:
 	virtual void device_reset() override;
 
 private:
-	// internal state
-	int      m_dirty_tmap[5];
+	init_cb m_init_cb;
+	update_cb m_update_cb;
 
-	uint8_t    m_ram[16];
-	int      m_tilemaps_set;
-	int      m_palette_index[5];
+	bitmap_ind16 *m_bitmaps[BITMAP_COUNT];
 
-	void reset_indexes();
+	int m_shadow_layer;
+
+	uint8_t m_pri[5], m_sha[2];
+	uint8_t m_inpri, m_extsha;
+	uint16_t m_cblk[5];
 };
 
-extern const device_type K053251;
 DECLARE_DEVICE_TYPE(K053251, k053251_device)
 
-#define MCFG_K053251_ADD(_tag) \
-	MCFG_DEVICE_ADD(_tag, K053251, 0)
 
 #endif // MAME_VIDEO_K053251_H

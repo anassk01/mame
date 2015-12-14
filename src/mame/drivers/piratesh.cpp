@@ -29,18 +29,17 @@
 
 #include "emu.h"
 #include "speaker.h"
-#include "video/k053250_ps.h"
+#include "video/k053250.h"
 #include "machine/nvram.h"
 #include "cpu/m68000/m68000.h"
 #include "sound/k054539.h"
-#include "includes/konamigx.h" // TODO: WHY?
-#include "video/konami_helper.h"
 #include "machine/ticket.h"
 #include "machine/gen_latch.h"
 #include "machine/k053252.h"
 #include "video/k055555.h"
 #include "video/k054000.h"
 #include "video/k053246_k053247_k055673.h"
+#include "video/k054156_k054157_k056832.h"
 
 class piratesh_state : public driver_device
 {
@@ -48,11 +47,11 @@ public:
 	piratesh_state(const machine_config &mconfig, device_type type, const char *tag)
 	: driver_device(mconfig, type, tag),
 	m_maincpu(*this,"maincpu"),
-	m_k053250(*this, "k053250"),
-	m_k053252(*this, "k053252"),
-	m_k056832(*this, "k056832"),
-	m_k055673(*this, "k055673"),
-	m_k055555(*this, "k055555"),
+	m_lvc(*this, "lvc"),
+	m_video_timings(*this, "video_timings"),
+	m_tilemap(*this, "tilemap"),
+	m_sprites(*this, "sprites"),
+	m_mixer(*this, "mixer"),
 //  m_k053246(*this, "k053246"),
 	m_k054539(*this, "k054539"),
 	m_spriteram(*this,"spriteram")
@@ -60,11 +59,11 @@ public:
 
 	required_device<cpu_device> m_maincpu;
 
-	required_device<k053250ps_device> m_k053250;
-	required_device<k053252_device> m_k053252;
-	required_device<k056832_device> m_k056832;
-	required_device<k055673_device> m_k055673;
-	required_device<k055555_device> m_k055555;
+	required_device<k053250_device> m_lvc;
+	required_device<k053252_device> m_video_timings;
+	required_device<k054156_056832_device> m_tilemap;
+	required_device<k053246_055673_device> m_sprites;
+	required_device<k055555_device> m_mixer;
 	required_device<k054539_device> m_k054539;
 //  required_device<k053247_device> m_k053246;
 
@@ -82,7 +81,8 @@ public:
 
 	void update_interrupts();
 
-	DECLARE_READ16_MEMBER(K056832_rom_r);
+	DECLARE_WRITE_LINE_MEMBER(vblankirq_w);
+
 	DECLARE_WRITE16_MEMBER(control1_w);
 	DECLARE_WRITE16_MEMBER(control2_w);
 	DECLARE_WRITE16_MEMBER(control3_w);
@@ -100,8 +100,6 @@ public:
 	uint32_t screen_update_piratesh(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 	DECLARE_WRITE_LINE_MEMBER(k054539_nmi_gen);
 	TIMER_DEVICE_CALLBACK_MEMBER(piratesh_interrupt);
-	K056832_CB_MEMBER(piratesh_tile_callback);
-	K055673_CB_MEMBER(piratesh_sprite_callback);
 };
 
 
@@ -112,6 +110,15 @@ void piratesh_state::update_interrupts()
 	m_maincpu->set_input_line(M68K_IRQ_5, m_int_status & 4 ? ASSERT_LINE : CLEAR_LINE);
 }
 
+WRITE_LINE_MEMBER(piratesh_state::vblankirq_w)
+{
+	if((m_int_enable & 2) && state)
+		m_int_status |= 2;
+	else
+		m_int_status &= ~2;
+	update_interrupts();
+}
+
 /*
  Priority issues:
 
@@ -120,7 +127,7 @@ void piratesh_state::update_interrupts()
  3.
 
 */
-
+#if 0
 K056832_CB_MEMBER(piratesh_state::piratesh_tile_callback)
 {
 	// Layer
@@ -175,7 +182,7 @@ K055673_CB_MEMBER(piratesh_state::piratesh_sprite_callback)
 	// 1100 1100
 	// 1010 1010
 }
-
+#endif
 
 
 VIDEO_START_MEMBER(piratesh_state, piratesh)
@@ -201,7 +208,7 @@ VIDEO_START_MEMBER(piratesh_state, piratesh)
 uint32_t piratesh_state::screen_update_piratesh(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill(0, cliprect);
-#if 1
+#if 0
 
 	int layers[4], layerpri[4];
 	static const int pris[4] = { K55_PRIINP_0, K55_PRIINP_3, K55_PRIINP_6, K55_PRIINP_7 };
@@ -264,6 +271,7 @@ uint32_t piratesh_state::screen_update_piratesh(screen_device &screen, bitmap_rg
 
 
 #else
+#if 0
 	// LAYER, FLAGS, PRIORITY
 	m_k056832->tilemap_draw(screen, bitmap, cliprect, 3, K056832_DRAW_FLAG_MIRROR, 1);
 
@@ -277,6 +285,7 @@ uint32_t piratesh_state::screen_update_piratesh(screen_device &screen, bitmap_rg
 	m_k056832->tilemap_draw(screen, bitmap, cliprect, 1, K056832_DRAW_FLAG_MIRROR, 4);
 	m_k056832->tilemap_draw(screen, bitmap, cliprect, 0, K056832_DRAW_FLAG_MIRROR, 0);
 #endif
+#endif
 	return 0;
 }
 
@@ -286,6 +295,7 @@ uint32_t piratesh_state::screen_update_piratesh(screen_device &screen, bitmap_rg
 /**********************************************************************************/
 /* IRQ controllers */
 
+#if 1
 TIMER_DEVICE_CALLBACK_MEMBER(piratesh_state::piratesh_interrupt)
 {
 	int scanline = param;
@@ -296,7 +306,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(piratesh_state::piratesh_interrupt)
 
 	if (scanline == 240)
 	{
-		m_k053250->vblank_w(1);
+	  //		m_k053250->vblank_w(1);
 
 		if (m_int_enable & 2)
 		{
@@ -307,7 +317,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(piratesh_state::piratesh_interrupt)
 
 	if (scanline == 0)
 	{
-		m_k053250->vblank_w(0);
+	  //		m_k053250->vblank_w(0);
 
 		if (m_int_enable & 4)
 		{
@@ -316,9 +326,9 @@ TIMER_DEVICE_CALLBACK_MEMBER(piratesh_state::piratesh_interrupt)
 		}
 	}
 }
+#endif
 
-
-
+#if 0
 READ16_MEMBER(piratesh_state::K056832_rom_r)
 {
 	uint16_t offs;
@@ -326,7 +336,7 @@ READ16_MEMBER(piratesh_state::K056832_rom_r)
 	offs = (m_control & 2 ? 0x1000 : 0) + offset;
 	return m_k056832->piratesh_rom_r(space, offs, mem_mask);
 }
-
+#endif
 
 
 WRITE16_MEMBER(piratesh_state::control1_w)
@@ -384,15 +394,14 @@ static ADDRESS_MAP_START( piratesh_map, AS_PROGRAM, 16, piratesh_state )
 	AM_RANGE(0x000000, 0x07ffff) AM_ROM
 	AM_RANGE(0x080000, 0x083fff) AM_RAM AM_SHARE("nvram")
 	AM_RANGE(0x084000, 0x087fff) AM_RAM
-	AM_RANGE(0x100000, 0x10001f) AM_DEVREADWRITE8("k053252", k053252_device, read, write, 0x00ff) // CRTC
-	AM_RANGE(0x180000, 0x18003f) AM_DEVWRITE("k056832", k056832_device, word_w) // TILEMAP
-	AM_RANGE(0x280000, 0x280007) AM_DEVWRITE("k055673", k055673_device, k053246_word_w) // SPRITES
-	AM_RANGE(0x290000, 0x29000f) AM_DEVREAD("k055673", k055673_device, k055673_ps_rom_word_r) // SPRITES
-	AM_RANGE(0x290010, 0x29001f) AM_DEVWRITE("k055673", k055673_device, k055673_reg_word_w) // SPRITES
-	AM_RANGE(0x2a0000, 0x2a0fff) AM_DEVREADWRITE("k055673", k055673_device, k053247_word_r, k053247_word_w) // SPRITES
-	AM_RANGE(0x2a1000, 0x2a3fff) AM_WRITENOP
-	AM_RANGE(0x2b0000, 0x2b000f) AM_DEVREADWRITE("k053250", k053250ps_device, reg_r, reg_w) // LVC
-	AM_RANGE(0x300000, 0x3000ff) AM_DEVWRITE("k055555", k055555_device, K055555_word_w)
+	AM_RANGE(0x100000, 0x10001f) AM_DEVICE8("video_timings", k053252_device, map, 0x00ff) // CRTC
+	AM_RANGE(0x180000, 0x18003f) AM_DEVICE("tilemap", k054156_056832_device, vacset) // TILEMAP
+	AM_RANGE(0x280000, 0x280007) AM_DEVICE("sprites", k053246_055673_device, objset1) // SPRITES
+	AM_RANGE(0x290000, 0x29000f) AM_DEVREAD("sprites", k053246_055673_device, rom16_r) // SPRITES
+	AM_RANGE(0x290010, 0x29001f) AM_DEVICE("sprites", k053246_055673_device, objset2) // SPRITES
+	AM_RANGE(0x2a0000, 0x2a3fff) AM_RAM AM_SHARE("spriteram") // SPRITES
+	AM_RANGE(0x2b0000, 0x2b000f) AM_DEVICE8("lvc", k053250_device, map, 0x00ff00ff)
+	AM_RANGE(0x300000, 0x3000ff) AM_DEVICE8("mixer", k055555_device, map, 0xff00ff00)
 	AM_RANGE(0x380000, 0x381fff) AM_RAM_DEVWRITE("palette", palette_device, write) AM_SHARE("palette")
 	AM_RANGE(0x400000, 0x400001) AM_READ_PORT("IN0")
 	AM_RANGE(0x400002, 0x400003) AM_READ_PORT("IN1")
@@ -402,11 +411,11 @@ static ADDRESS_MAP_START( piratesh_map, AS_PROGRAM, 16, piratesh_state )
 	AM_RANGE(0x40000c, 0x40000d) AM_WRITE(control1_w)
 	AM_RANGE(0x400010, 0x400011) AM_WRITE(control2_w)
 	AM_RANGE(0x400014, 0x400015) AM_WRITE(control3_w)
-	AM_RANGE(0x500000, 0x50ffff) AM_READ(K056832_rom_r) // VRAM ROM
-	AM_RANGE(0x580000, 0x581fff) AM_DEVREAD("k053250", k053250ps_device, rom_r) // LVC ROM access
+	AM_RANGE(0x500000, 0x50ffff) AM_DEVREAD("tilemap", k054156_056832_device, rom16_r) // VRAM ROM
+	AM_RANGE(0x580000, 0x581fff) AM_DEVREAD("lvc", k053250_device, rom_r)
 	AM_RANGE(0x600000, 0x6004ff) AM_DEVREADWRITE8("k054539", k054539_device, read, write, 0xff00) // SOUND
-	AM_RANGE(0x680000, 0x681fff) AM_DEVREADWRITE("k056832", k056832_device, ram_word_r, ram_word_w) // TILEMAP
-	AM_RANGE(0x700000, 0x703fff) AM_DEVREADWRITE("k053250", k053250ps_device, ram_r, ram_w) // LVC
+	AM_RANGE(0x680000, 0x681fff) AM_DEVREADWRITE("tilemap", k054156_056832_device, vram16_r, vram16_w) // TILEMAP
+	AM_RANGE(0x700000, 0x703fff) AM_RAM AM_SHARE("lvcram")
 ADDRESS_MAP_END
 
 
@@ -469,8 +478,8 @@ static INPUT_PORTS_START( piratesh )
 	PORT_BIT( 0x8000, IP_ACTIVE_LOW, IPT_SERVICE ) PORT_NAME(DEF_STR( Test )) PORT_CODE(KEYCODE_F2)
 
 	PORT_START("SPECIAL")
-	PORT_BIT( 0x0100, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("k053250", k053250ps_device, dmairq_r)
-	PORT_BIT( 0x0200, IP_ACTIVE_HIGH, IPT_UNKNOWN ) // FIXME: NCPU from 053246 (DMA)
+//	PORT_BIT( 0x0100, IP_ACTIVE_HIGH, IPT_SPECIAL ) PORT_READ_LINE_DEVICE_MEMBER("k053250", k053250ps_device, dmairq_r)
+	PORT_BIT( 0x0300, IP_ACTIVE_HIGH, IPT_UNKNOWN ) // FIXME: NCPU from 053246 (DMA)
 	PORT_BIT( 0x0c00, IP_ACTIVE_HIGH, IPT_SPECIAL )PORT_CUSTOM_MEMBER(DEVICE_SELF, piratesh_state, battery_r, nullptr)
 
 	PORT_START("HELM")
@@ -584,12 +593,14 @@ static MACHINE_CONFIG_START( piratesh )
 	/* basic machine hardware */
 	MCFG_CPU_ADD("maincpu", M68000, XTAL_32MHz/2)
 	MCFG_CPU_PROGRAM_MAP(piratesh_map)
-	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", piratesh_state, piratesh_interrupt, "screen", 0, 1)
 
 	MCFG_NVRAM_ADD_0FILL("nvram")
 
-	MCFG_DEVICE_ADD("k053252", K053252, XTAL_32MHz/4)
-	MCFG_K053252_OFFSETS(40, 16) // TODO
+	MCFG_DEVICE_ADD("video_timings", K053252, XTAL_32MHz/4)
+	MCFG_K053252_INT1_CB(WRITELINE(piratesh_state, vblankirq_w))
+	MCFG_VIDEO_SET_SCREEN("screen")
+
+	MCFG_TIMER_DRIVER_ADD_SCANLINE("scantimer", piratesh_state, piratesh_interrupt, "screen", 0, 1)
 
 	MCFG_MACHINE_START_OVERRIDE(piratesh_state, piratesh)
 	MCFG_MACHINE_RESET_OVERRIDE(piratesh_state, piratesh)
@@ -600,43 +611,25 @@ static MACHINE_CONFIG_START( piratesh )
 	/* video hardware */
 	MCFG_SCREEN_ADD("screen", RASTER)
 	MCFG_SCREEN_VIDEO_ATTRIBUTES(VIDEO_UPDATE_AFTER_VBLANK)
-//  MCFG_SCREEN_REFRESH_RATE(60)
-	MCFG_SCREEN_RAW_PARAMS(6000000, 288+16+32+48, 0, 287, 224+16+8+16, 0, 223) // TODO
-	MCFG_SCREEN_VBLANK_TIME(ATTOSECONDS_IN_USEC(600))
-	MCFG_SCREEN_SIZE(64*8, 32*8)
-	MCFG_SCREEN_VISIBLE_AREA(24, 24+288-1, 16, 16+224-1)
+	MCFG_SCREEN_RAW_PARAMS(XTAL_32MHz/4, 512, 55, 55+384, 264, 15, 15+224)
 	MCFG_SCREEN_UPDATE_DRIVER(piratesh_state, screen_update_piratesh)
 
 	MCFG_PALETTE_ADD("palette", 2048)
 	MCFG_PALETTE_FORMAT(BGRX)
-	MCFG_PALETTE_ENABLE_SHADOWS()
-	MCFG_PALETTE_ENABLE_HILIGHTS()
 
-	MCFG_DEVICE_ADD("k056832", K056832, 0)
-	MCFG_K056832_CB(piratesh_state, piratesh_tile_callback)
-	MCFG_K056832_CONFIG("gfx1", K056832_BPP_4PIRATESH, 1, 0, "none")
-	MCFG_K056832_PALETTE("palette")
+	MCFG_K054156_056832_ADD("tilemap", XTAL_32MHz/4, 4, 4, 24, "palette")
 
-	MCFG_K055555_ADD("k055555")
+	MCFG_K053246_055673_ADD("sprites", XTAL_32MHz/4, "palette", "spriteram")
 
-	MCFG_K053250PS_ADD("k053250", "palette", "screen", -16, 0)
+	MCFG_K055555_ADD("mixer")
 
-	MCFG_DEVICE_ADD("k055673", K055673, 0)
-	MCFG_K055673_CB(piratesh_state, piratesh_sprite_callback)
-	MCFG_K055673_CONFIG("gfx2", K055673_LAYOUT_PS, -60, 24)
-	MCFG_K055673_PALETTE("palette")
+	MCFG_K053250_ADD("lvc", ":lvcram")
 
-	// ????
-	//MCFG_DEVICE_ADD("k053246", K053246, 0)
-	//MCFG_K053246_CB(moo_state, sprite_callback)
-	//MCFG_K053246_CONFIG("gfx2", NORMAL_PLANE_ORDER, -48+1, 23)
-	//MCFG_K053246_PALETTE("palette")
+//	MCFG_DEVICE_ADD("k054338", K054338, 0)
+//	MCFG_K054338_ALPHAINV(1)
+//	MCFG_K054338_MIXER("k055555")
 
-	MCFG_DEVICE_ADD("k054338", K054338, 0)
-	MCFG_K054338_ALPHAINV(1)
-	MCFG_K054338_MIXER("k055555")
-
-	MCFG_VIDEO_START_OVERRIDE(piratesh_state, piratesh)
+//	MCFG_VIDEO_START_OVERRIDE(piratesh_state, piratesh)
 
 	/* sound hardware */
 	MCFG_SPEAKER_STANDARD_STEREO("lspeaker", "rspeaker")
@@ -654,16 +647,16 @@ ROM_START( piratesh )
 	ROM_LOAD16_WORD_SWAP( "360ua-c04.4p", 0x000000, 0x80000, CRC(6d69dd90) SHA1(ccbdbfea406d9cbc3f242211290ba82ccbbe3795) )
 
 	/* tiles */
-	ROM_REGION( 0x80000, "gfx1", ROMREGION_ERASE00 ) // 27C4096
+	ROM_REGION( 0x80000, "tilemap", ROMREGION_ERASE00 ) // 27C4096
 	ROM_LOAD( "360ua-a01.17g", 0x000000, 0x80000, CRC(e39153f5) SHA1(5da9132a2c24a15b55c3f65c26e2ad0467411a88) )
 
 	/* sprites */
-	ROM_REGION( 0x80000*8, "gfx2", ROMREGION_ERASE00 ) // 27C4096
+	ROM_REGION( 0x80000*8, "sprites", ROMREGION_ERASE00 ) // 27C4096
 	ROM_LOAD16_BYTE( "360ua-a02.21l", 0x000000, 0x80000, CRC(82207997) SHA1(fe143285a12fab5227e883113d798acad7bf4c97) )
 	ROM_LOAD16_BYTE( "360ua-a03.23l", 0x000001, 0x80000, CRC(a9e36d51) SHA1(1a8de8d8d2abfee5ac0f0822e203846f7f5f1767) )
 
 	/* road generator */
-	ROM_REGION( 0x080000, "k053250", ROMREGION_ERASE00 ) // 27C040
+	ROM_REGION( 0x080000, "lvc", ROMREGION_ERASE00 ) // 27C040
 	ROM_LOAD( "360ua-a05.26p", 0x000000, 0x80000, CRC(dab7f439) SHA1(2372612c0b04c77a85ccbadc100cb741b85f0481) )
 
 	/* sound data */

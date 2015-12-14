@@ -32,25 +32,24 @@ public:
 		m_filter1r(*this, "filter1r"),
 		m_filter2l(*this, "filter2l"),
 		m_filter2r(*this, "filter2r"),
-		m_k056832(*this, "k056832"),
-		m_k053246(*this, "k053246"),
-		m_k053250(*this, "k053250"),
-		m_k053251(*this, "k053251"),
-		m_k053252(*this, "k053252"),
-		m_k054338(*this, "k054338"),
+		m_tilemap(*this, "tilemap"),
+		m_sprites(*this, "sprites"),
+		m_lvc(*this, "lvc"),
+		m_mixer(*this, "mixer"),
+		m_video_timings(*this, "video_timings"),
+		m_blender(*this, "blender"),
 		m_palette(*this, "palette"),
 		m_screen(*this, "screen"),
-		m_k054321(*this, "k054321") { }
+		m_soundctrl(*this, "soundctrl") { }
 
 	/* memory pointers */
 	required_shared_ptr<uint16_t> m_workram;
 	required_shared_ptr<uint16_t> m_spriteram;
 
 	/* video-related */
-	int        m_layer_colorbase[4];
-	int        m_sprite_colorbase;
-	int        m_layerpri[4];
-	int        m_cur_alpha;
+	bool m_chenmix;
+	bool m_render_front;
+	std::unique_ptr<bitmap_ind16> m_tilemap_bitmap;
 
 	/* misc */
 	uint16_t     m_cur_control2;
@@ -68,18 +67,16 @@ public:
 	required_device<filter_volume_device> m_filter1r;
 	required_device<filter_volume_device> m_filter2l;
 	required_device<filter_volume_device> m_filter2r;
-	required_device<k056832_device> m_k056832;
-	required_device<k053247_device> m_k053246;
-	required_device<k053250_device> m_k053250;
-	required_device<k053251_device> m_k053251;
-	required_device<k053252_device> m_k053252;
-	required_device<k054338_device> m_k054338;
+	required_device<k054156_054157_device> m_tilemap;
+	required_device<k053246_053247_device> m_sprites;
+	required_device<k053250_device> m_lvc;
+	required_device<k053251_device> m_mixer;
+	required_device<k053252_device> m_video_timings;
+	required_device<k054338_device> m_blender;
 	required_device<palette_device> m_palette;
 	required_device<screen_device> m_screen;
-	required_device<k054321_device> m_k054321;
+	required_device<k054321_device> m_soundctrl;
 
-	DECLARE_READ16_MEMBER(spriteram_mirror_r);
-	DECLARE_WRITE16_MEMBER(spriteram_mirror_w);
 	DECLARE_READ16_MEMBER(xexex_waitskip_r);
 	DECLARE_READ16_MEMBER(control2_r);
 	DECLARE_WRITE16_MEMBER(control2_w);
@@ -88,14 +85,15 @@ public:
 	DECLARE_DRIVER_INIT(xexex);
 	virtual void machine_start() override;
 	virtual void machine_reset() override;
-	virtual void video_start() override;
-	uint32_t screen_update_xexex(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
-	TIMER_CALLBACK_MEMBER(dmaend_callback);
 	TIMER_DEVICE_CALLBACK_MEMBER(xexex_interrupt);
 	void xexex_postload();
-	void xexex_objdma( int limiter );
 	void parse_control2(  );
-	K056832_CB_MEMBER(tile_callback);
-	K053246_CB_MEMBER(sprite_callback);
 	K054539_CB_MEMBER(ym_set_mixing);
+
+	void sprites_wiring(uint32_t output, uint16_t &color, uint16_t &attr);
+	offs_t sprites_remap(offs_t offset);
+	void blender_init(bitmap_ind16 **bitmaps);
+	void blender_update(bitmap_ind16 **bitmaps, const rectangle &cliprect);
+	void mixer_init(bitmap_ind16 **bitmaps);
+	void mixer_update(bitmap_ind16 **bitmaps, const rectangle &cliprect);
 };

@@ -134,6 +134,8 @@ files {
 	MAME_DIR .. "src/emu/ioport.h",
 	MAME_DIR .. "src/emu/inpttype.h",
 	MAME_DIR .. "src/emu/logmacro.h",
+	MAME_DIR .. "src/emu/ksnotifier.h",
+	MAME_DIR .. "src/emu/ksnotifier.cpp",
 	MAME_DIR .. "src/emu/machine.cpp",
 	MAME_DIR .. "src/emu/machine.h",
 	MAME_DIR .. "src/emu/mconfig.cpp",
